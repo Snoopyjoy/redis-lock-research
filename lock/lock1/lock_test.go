@@ -2,6 +2,8 @@ package lock1
 
 import (
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -43,7 +45,7 @@ func logFuc(t *testing.T) func(...interface{}) {
 }
 
 func TestTryLock(t *testing.T) {
-	l := NewLock("TestTryLock", pool, 3)
+	l := NewLock("TestTryLock", pool, &LockOptions{TimeoutSec: 3})
 	log := logFuc(t)
 
 	res, err := l.TryLock()
@@ -78,7 +80,7 @@ func TestTryLock(t *testing.T) {
 }
 
 func TestRelease(t *testing.T) {
-	l := NewLock("TestRelease", pool, 3)
+	l := NewLock("TestRelease", pool, &LockOptions{TimeoutSec: 3})
 	log := logFuc(t)
 	res, err := l.TryLock()
 	if err != nil {
@@ -101,4 +103,38 @@ func TestRelease(t *testing.T) {
 		t.Fatalf("tryLock after realse expected true but get false")
 	}
 	log("case 1 lock after release pass")
+}
+
+func TestLock(t *testing.T) {
+	l := NewLock("TestRelease", pool, &LockOptions{TimeoutSec: 3})
+	log := logFuc(t)
+	err := l.Lock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = l.Lock()
+	if err != ErrMaxRetry {
+		t.Fatal("expect lock max retry")
+	}
+	l.Release()
+
+	wg := sync.WaitGroup{}
+	paraSize := 5
+	var successNum int32 = 0
+	wg.Add(paraSize)
+	for i := 0; i < paraSize; i++ {
+		go func() {
+			err := l.Lock()
+			if err == nil {
+				atomic.AddInt32(&successNum, 1)
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+
+	log("successNum", successNum)
+	if successNum > 1 {
+		t.Fatal("parallel lock success num > 1")
+	}
 }
