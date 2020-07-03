@@ -1,4 +1,4 @@
-module zorro.com/redis-lock-research/redis-lock-research
+module gitlab.innotechx.com/hexiaoliang/redis-lock-research
 
 go 1.14
 

@@ -1,4 +1,4 @@
-package lock1
+package lock
 
 import (
 	"fmt"
@@ -14,6 +14,12 @@ import (
 var (
 	pool *redis.Pool
 )
+
+func getTime() string {
+	now := time.Now()
+	tstr := now.Format("2006-01-02 15:04:05")
+	return fmt.Sprintf("[%s.%d] ", tstr, now.Nanosecond())
+}
 
 func TestMain(m *testing.M) {
 	// rds, err := miniredis.Run()
@@ -37,16 +43,8 @@ func newPool(addr string) *redis.Pool {
 	}
 }
 
-func logFuc(t *testing.T) func(...interface{}) {
-	return func(args ...interface{}) {
-		tstr := time.Now().Format("2006-01-02 15:04:05")
-		t.Logf("[%s] %v \n", tstr, args)
-	}
-}
-
 func TestTryLock(t *testing.T) {
 	l := NewLock("TestTryLock", pool, &LockOptions{TimeoutSec: 3})
-	log := logFuc(t)
 
 	res, err := l.TryLock()
 	if err != nil {
@@ -55,7 +53,7 @@ func TestTryLock(t *testing.T) {
 	if res == false {
 		t.Fatalf("first tryLock expect true but get false")
 	}
-	log("case 1 first lock pass")
+	t.Log(getTime(), "case 1 first lock pass")
 	res, err = l.TryLock()
 	if err != nil {
 		t.Fatal(err)
@@ -63,9 +61,9 @@ func TestTryLock(t *testing.T) {
 	if res == true {
 		t.Fatalf("second tryLock expect false but get true")
 	}
-	log("case 2 second lock pass")
+	t.Log(getTime(), "case 2 second lock pass")
 
-	log("waiting for expiration....")
+	t.Log(getTime(), "waiting for expiration....")
 	// 等待过期
 	time.Sleep(time.Millisecond * 3500)
 
@@ -76,12 +74,11 @@ func TestTryLock(t *testing.T) {
 	if res == false {
 		t.Fatalf("tryLock after expiration expect true but get false")
 	}
-	log("case 3 lock expire pass")
+	t.Log(getTime(), "case 3 lock expire pass")
 }
 
 func TestRelease(t *testing.T) {
 	l := NewLock("TestRelease", pool, &LockOptions{TimeoutSec: 3})
-	log := logFuc(t)
 	res, err := l.TryLock()
 	if err != nil {
 		t.Fatal(err)
@@ -89,12 +86,12 @@ func TestRelease(t *testing.T) {
 	if res == false {
 		t.Fatalf("first tryLock expect true but get false")
 	}
-	log("case 1 first lock pass")
+	t.Log(getTime(), "case 1 first lock pass")
 	_, err = l.Release()
 	if err != nil {
 		t.Fatal(err)
 	}
-	log("lock released")
+	t.Log(getTime(), "lock released")
 	res, err = l.TryLock()
 	if err != nil {
 		t.Fatal(err)
@@ -102,12 +99,11 @@ func TestRelease(t *testing.T) {
 	if res == false {
 		t.Fatalf("tryLock after realse expected true but get false")
 	}
-	log("case 1 lock after release pass")
+	t.Log(getTime(), "case 1 lock after release pass")
 }
 
 func TestLock(t *testing.T) {
 	l := NewLock("TestLock", pool, &LockOptions{TimeoutSec: 3})
-	log := logFuc(t)
 	err := l.Lock()
 	if err != nil {
 		t.Fatal(err)
@@ -133,7 +129,7 @@ func TestLock(t *testing.T) {
 	}
 	wg.Wait()
 
-	log("successNum", successNum)
+	t.Log(getTime(), "successNum", successNum)
 	if successNum > 1 {
 		t.Fatal("parallel lock success num > 1")
 	}
@@ -141,7 +137,6 @@ func TestLock(t *testing.T) {
 
 func TestLockAllSuccess(t *testing.T) {
 	l := NewLock("TestLockAllSuccess", pool, &LockOptions{TimeoutSec: 3})
-	log := logFuc(t)
 
 	wg := sync.WaitGroup{}
 	paraSize := 5
@@ -153,14 +148,14 @@ func TestLockAllSuccess(t *testing.T) {
 			if err == nil {
 				atomic.AddInt32(&successNum, 1)
 			}
-			log("lock success", seq)
+			t.Log(getTime(), "lock success", seq)
 			l.Release()
 			wg.Done()
 		}(i)
 	}
 	wg.Wait()
 
-	log("successNum", successNum)
+	t.Log(getTime(), "successNum", successNum)
 	if successNum != int32(paraSize) {
 		t.Fatal("parallel lock success num > 1")
 	}

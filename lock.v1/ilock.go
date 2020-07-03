@@ -1,4 +1,4 @@
-package lock1
+package lock
 
 // 加锁与解锁的功能
 type Ilock interface {
