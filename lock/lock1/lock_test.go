@@ -106,7 +106,7 @@ func TestRelease(t *testing.T) {
 }
 
 func TestLock(t *testing.T) {
-	l := NewLock("TestRelease", pool, &LockOptions{TimeoutSec: 3})
+	l := NewLock("TestLock", pool, &LockOptions{TimeoutSec: 3})
 	log := logFuc(t)
 	err := l.Lock()
 	if err != nil {
@@ -135,6 +135,33 @@ func TestLock(t *testing.T) {
 
 	log("successNum", successNum)
 	if successNum > 1 {
+		t.Fatal("parallel lock success num > 1")
+	}
+}
+
+func TestLockAllSuccess(t *testing.T) {
+	l := NewLock("TestLockAllSuccess", pool, &LockOptions{TimeoutSec: 3})
+	log := logFuc(t)
+
+	wg := sync.WaitGroup{}
+	paraSize := 5
+	var successNum int32 = 0
+	wg.Add(paraSize)
+	for i := 0; i < paraSize; i++ {
+		go func(seq int) {
+			err := l.Lock()
+			if err == nil {
+				atomic.AddInt32(&successNum, 1)
+			}
+			log("lock success", seq)
+			l.Release()
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+
+	log("successNum", successNum)
+	if successNum != int32(paraSize) {
 		t.Fatal("parallel lock success num > 1")
 	}
 }
