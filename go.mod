@@ -1,4 +1,4 @@
-module gitlab.innotechx.com/hexiaoliang/redis-lock-research
+module github.com/Snoopyjoy/redis-lock-research
 
 go 1.14
 
