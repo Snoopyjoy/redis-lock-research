@@ -7,6 +7,14 @@ import (
 	"github.com/gomodule/redigo/redis"
 )
 
+var deleteScript = redis.NewScript(1, `
+	if redis.call("GET", KEYS[1]) == ARGV[1] then
+		return redis.call("DEL", KEYS[1])
+	else
+		return 0
+	end
+`)
+
 var (
 	ErrMaxRetry = errors.New("max retry")
 )
@@ -14,6 +22,7 @@ var (
 type lock struct {
 	// 资源
 	key        string
+	resourceID string
 	pool       *redis.Pool
 	timeoutSec int64
 	retryGap   time.Duration
@@ -33,6 +42,7 @@ func NewLock(key string, pool *redis.Pool, options *LockOptions) Ilock {
 		timeoutSec: 15,
 		maxRetry:   50,
 		retryGap:   time.Millisecond * 50,
+		resourceID: idGen(),
 	}
 
 	if options == nil {
@@ -53,7 +63,7 @@ func NewLock(key string, pool *redis.Pool, options *LockOptions) Ilock {
 func (l *lock) TryLock() (bool, error) {
 	conn := l.pool.Get()
 	defer conn.Close()
-	reply, err := redis.String(conn.Do("SET", l.key, 1, "NX", "EX", l.timeoutSec))
+	reply, err := redis.String(conn.Do("SET", l.key, l.resourceID, "NX", "EX", l.timeoutSec))
 
 	if err != nil {
 		if err == redis.ErrNil {
@@ -92,7 +102,7 @@ func (l *lock) Lock() error {
 func (l *lock) Release() (bool, error) {
 	conn := l.pool.Get()
 	defer conn.Close()
-	rst, err := redis.Int(conn.Do("DEL", l.key))
+	rst, err := redis.Int(deleteScript.Do(conn, l.key, l.resourceID))
 	if err != nil {
 		return false, err
 	}
