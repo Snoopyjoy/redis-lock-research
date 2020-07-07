@@ -3,6 +3,7 @@ package lock
 import (
 	"encoding/base64"
 	"encoding/binary"
+	"fmt"
 	"math/rand"
 	"os"
 	"sync"
@@ -11,11 +12,15 @@ import (
 
 var pid = uint16(time.Now().UnixNano() & 65535)
 var machineFlag uint16
-var onece = sync.Once{}
+var once = sync.Once{}
 
 func getMachineFlag() uint16 {
-	onece.Do(func() {
-		hostname, _ := os.Hostname()
+	once.Do(func() {
+		hostname, err := os.Hostname()
+		if err != nil {
+			fmt.Errorf("get hostname err: %s", err.Error())
+			hostname = "localhost"
+		}
 		machineFlag = hashNum(hostname)
 	})
 	return machineFlag

@@ -109,7 +109,7 @@ func TestLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = l.Lock()
-	if err != ErrMaxRetry {
+	if err != ErrMaxTires {
 		t.Fatal("expect lock max retry")
 	}
 	l.Release()

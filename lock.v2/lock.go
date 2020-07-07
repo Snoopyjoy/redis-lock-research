@@ -16,7 +16,7 @@ var deleteScript = redis.NewScript(1, `
 `)
 
 var (
-	ErrMaxRetry = errors.New("max retry")
+	ErrMaxTires = errors.New("max tires")
 )
 
 type lock struct {
@@ -26,13 +26,13 @@ type lock struct {
 	pool       *redis.Pool
 	timeoutSec int64
 	retryGap   time.Duration
-	maxRetry   int
+	maxTries   int
 }
 
 type LockOptions struct {
 	TimeoutSec int64
 	RetryGap   time.Duration
-	MaxRetry   int
+	MaxTires   int
 }
 
 func NewLock(key string, pool *redis.Pool, options *LockOptions) Ilock {
@@ -40,7 +40,7 @@ func NewLock(key string, pool *redis.Pool, options *LockOptions) Ilock {
 		key:        key,
 		pool:       pool,
 		timeoutSec: 15,
-		maxRetry:   50,
+		maxTries:   50,
 		retryGap:   time.Millisecond * 50,
 		resourceID: idGen(),
 	}
@@ -51,8 +51,8 @@ func NewLock(key string, pool *redis.Pool, options *LockOptions) Ilock {
 	if options.TimeoutSec > 0 {
 		l.timeoutSec = options.TimeoutSec
 	}
-	if options.MaxRetry > 0 {
-		l.maxRetry = options.MaxRetry
+	if options.MaxTires > 0 {
+		l.maxTries = options.MaxTires
 	}
 	if options.RetryGap > 0 {
 		l.retryGap = options.RetryGap
@@ -78,16 +78,10 @@ func (l *lock) TryLock() (bool, error) {
 }
 
 func (l *lock) Lock() error {
-	ok, err := l.TryLock()
-	if err != nil {
-		return err
-	}
-	if ok {
-		return nil
-	}
-
-	for i := 0; i < l.maxRetry; i++ {
-		time.Sleep(l.retryGap)
+	for i := 0; i < l.maxTries; i++ {
+		if i != 0 {
+			time.Sleep(l.retryGap)
+		}
 		ok, err := l.TryLock()
 		if err != nil {
 			return err
@@ -96,7 +90,7 @@ func (l *lock) Lock() error {
 			return nil
 		}
 	}
-	return ErrMaxRetry
+	return ErrMaxTires
 }
 
 func (l *lock) Release() (bool, error) {

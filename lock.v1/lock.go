@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	ErrMaxRetry = errors.New("max retry")
+	ErrMaxTries = errors.New("max tries")
 )
 
 type lock struct {
@@ -17,13 +17,13 @@ type lock struct {
 	pool       *redis.Pool
 	timeoutSec int64
 	retryGap   time.Duration
-	maxRetry   int
+	maxTries   int
 }
 
 type LockOptions struct {
 	TimeoutSec int64
 	RetryGap   time.Duration
-	MaxRetry   int
+	MaxTries   int
 }
 
 func NewLock(key string, pool *redis.Pool, options *LockOptions) Ilock {
@@ -31,7 +31,7 @@ func NewLock(key string, pool *redis.Pool, options *LockOptions) Ilock {
 		key:        key,
 		pool:       pool,
 		timeoutSec: 15,
-		maxRetry:   50,
+		maxTries:   50,
 		retryGap:   time.Millisecond * 50,
 	}
 
@@ -41,8 +41,8 @@ func NewLock(key string, pool *redis.Pool, options *LockOptions) Ilock {
 	if options.TimeoutSec > 0 {
 		l.timeoutSec = options.TimeoutSec
 	}
-	if options.MaxRetry > 0 {
-		l.maxRetry = options.MaxRetry
+	if options.MaxTries > 0 {
+		l.maxTries = options.MaxTries
 	}
 	if options.RetryGap > 0 {
 		l.retryGap = options.RetryGap
@@ -68,16 +68,10 @@ func (l *lock) TryLock() (bool, error) {
 }
 
 func (l *lock) Lock() error {
-	ok, err := l.TryLock()
-	if err != nil {
-		return err
-	}
-	if ok {
-		return nil
-	}
-
-	for i := 0; i < l.maxRetry; i++ {
-		time.Sleep(l.retryGap)
+	for i := 0; i < l.maxTries; i++ {
+		if i != 0 {
+			time.Sleep(l.retryGap)
+		}
 		ok, err := l.TryLock()
 		if err != nil {
 			return err
@@ -86,7 +80,7 @@ func (l *lock) Lock() error {
 			return nil
 		}
 	}
-	return ErrMaxRetry
+	return ErrMaxTries
 }
 
 func (l *lock) Release() (bool, error) {

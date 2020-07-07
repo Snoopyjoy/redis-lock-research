@@ -109,7 +109,7 @@ func TestLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = l.Lock()
-	if err != ErrMaxRetry {
+	if err != ErrMaxTries {
 		t.Fatal("expect lock max retry")
 	}
 	l.Release()
@@ -159,4 +159,27 @@ func TestLockAllSuccess(t *testing.T) {
 	if successNum != int32(paraSize) {
 		t.Fatal("parallel lock success num > 1")
 	}
+}
+
+// ************************* 一些缺陷的演示 *************************
+
+func TestLockReleasedByOhters(t *testing.T) {
+	l1 := NewLock("TestLockReleasedByOhters", pool, &LockOptions{TimeoutSec: 3})
+	l2 := NewLock("TestLockReleasedByOhters", pool, &LockOptions{TimeoutSec: 3})
+	err := l1.Lock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(getTime(), "lock1 lock success")
+
+	ok, err := l2.Release()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(getTime(), "lock2 release lock result:", ok)
+	err = l2.Lock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(getTime(), "woops! lock2 lock success!")
 }

@@ -109,7 +109,7 @@ func TestLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = l.Lock()
-	if err != ErrMaxRetry {
+	if err != ErrMaxTries {
 		t.Fatal("expect lock max retry")
 	}
 	l.Release()
@@ -132,6 +132,20 @@ func TestLock(t *testing.T) {
 	t.Log(getTime(), "successNum", successNum)
 	if successNum > 1 {
 		t.Fatal("parallel lock success num > 1")
+	}
+}
+
+func TestLockTimeout(t *testing.T) {
+	l := NewLock("TestLockTimeout", pool, &LockOptions{TimeoutSec: 3})
+	err := l.Lock()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	l1 := NewLock("TestLockTimeout", pool, &LockOptions{TimeoutSec: 3, GetLockTmeout: time.Millisecond * 100})
+	err = l1.Lock()
+	if err != ErrGetLockTimeout {
+		t.Fatal("expected ErrGetLockTimeout")
 	}
 }
 
@@ -212,5 +226,105 @@ func TestLeftSec(t *testing.T) {
 	t.Logf("left seconds: %d\n", res)
 	if res < 2 || res > 3 {
 		t.Fatal("LeftSec val wrong")
+	}
+}
+
+func TestExtend(t *testing.T) {
+	l1 := NewLock("TestExtend", pool, &LockOptions{TimeoutSec: 3})
+	l2 := NewLock("TestExtend", pool, &LockOptions{TimeoutSec: 3})
+	err := l1.Lock()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := l1.Extend(5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("extend fail")
+	}
+	res, err := l1.LeftSec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("left seconds: %d\n", res)
+	if res < 4 || res > 5 {
+		t.Fatal("LeftSec val wrong")
+	}
+
+	ok, err = l2.Extend(3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("l2 extend success")
+	}
+	res, err = l1.LeftSec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("left seconds: %d\n", res)
+
+	ok, err = l1.Extend(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("extend fail")
+	}
+
+	res, err = l1.LeftSec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("left seconds: %d\n", res)
+	time.Sleep(time.Millisecond * 1500)
+
+	res, err = l1.LeftSec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("left seconds: %d\n", res)
+
+	ok, err = l1.Extend(5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Error("extend fail")
+	}
+
+	res, err = l1.LeftSec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("left seconds: %d\n", res)
+}
+
+func TestValid(t *testing.T) {
+	l1 := NewLock("TestValid", pool, &LockOptions{TimeoutSec: 3})
+
+	ok, err := l1.Valid()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Log("valid expected false but got true")
+	}
+	err = l1.Lock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	lockId := l1.GetID()
+	if lockId == "" {
+		t.Fatal("empty lockId")
+	}
+	ok, err = l1.Valid()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Log("valid expected true but got false")
 	}
 }

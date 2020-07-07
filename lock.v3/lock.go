@@ -16,31 +16,43 @@ var deleteScript = redis.NewScript(1, `
 `)
 
 var touchScript = redis.NewScript(1, `
-	if redis.call("GET", KEYS[1]) == ARGV[1] then
-		return redis.call("expire", KEYS[1], ARGV[2])
+	local val = redis.call("GET", KEYS[1])
+	if val then
+		if val == ARGV[1] then
+			return redis.call("expire", KEYS[1], ARGV[2])
+		else
+			return 0
+		end
 	else
+		local ret = redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[2], "NX")
+		if ret then
+			return 1
+		end
 		return 0
 	end
 `)
 
 var (
-	ErrMaxRetry = errors.New("max retry")
+	ErrMaxTries       = errors.New("max tries")
+	ErrGetLockTimeout = errors.New("get lock time out")
 )
 
 type lock struct {
 	// 资源
-	key        string
-	resourceID string
-	pool       *redis.Pool
-	timeoutSec int64
-	retryGap   time.Duration
-	maxRetry   int
+	key            string
+	resourceID     string
+	pool           *redis.Pool
+	timeoutSec     int64         // 锁过期时间
+	retryGap       time.Duration // 重试间隔
+	maxTires       int           // 最大尝试次数
+	getLockTimeout time.Duration // 加锁超时时间
 }
 
 type LockOptions struct {
-	TimeoutSec int64
-	RetryGap   time.Duration
-	MaxRetry   int
+	TimeoutSec    int64         // 锁过期时间
+	RetryGap      time.Duration // 重试间隔
+	MaxTries      int           // 最大尝试次数
+	GetLockTmeout time.Duration // 加锁超时时间
 }
 
 func NewLock(key string, pool *redis.Pool, options *LockOptions) Ilock {
@@ -48,7 +60,7 @@ func NewLock(key string, pool *redis.Pool, options *LockOptions) Ilock {
 		key:        key,
 		pool:       pool,
 		timeoutSec: 15,
-		maxRetry:   50,
+		maxTires:   50,
 		retryGap:   time.Millisecond * 50,
 		resourceID: idGen(),
 	}
@@ -59,11 +71,14 @@ func NewLock(key string, pool *redis.Pool, options *LockOptions) Ilock {
 	if options.TimeoutSec > 0 {
 		l.timeoutSec = options.TimeoutSec
 	}
-	if options.MaxRetry > 0 {
-		l.maxRetry = options.MaxRetry
+	if options.MaxTries > 0 {
+		l.maxTires = options.MaxTries
 	}
 	if options.RetryGap > 0 {
 		l.retryGap = options.RetryGap
+	}
+	if options.GetLockTmeout > 0 {
+		l.getLockTimeout = options.GetLockTmeout
 	}
 	return l
 }
@@ -86,16 +101,12 @@ func (l *lock) TryLock() (bool, error) {
 }
 
 func (l *lock) Lock() error {
-	ok, err := l.TryLock()
-	if err != nil {
-		return err
-	}
-	if ok {
-		return nil
-	}
+	until := time.Now().Add(l.getLockTimeout)
+	for i := 0; i < l.maxTires; i++ {
+		if i != 0 {
+			time.Sleep(l.retryGap)
+		}
 
-	for i := 0; i < l.maxRetry; i++ {
-		time.Sleep(l.retryGap)
 		ok, err := l.TryLock()
 		if err != nil {
 			return err
@@ -103,8 +114,11 @@ func (l *lock) Lock() error {
 		if ok {
 			return nil
 		}
+		if l.getLockTimeout > 0 && time.Now().After(until) {
+			return ErrGetLockTimeout
+		}
 	}
-	return ErrMaxRetry
+	return ErrMaxTries
 }
 
 func (l *lock) Release() (bool, error) {
@@ -120,10 +134,13 @@ func (l *lock) Release() (bool, error) {
 	return false, nil
 }
 
-func (l *lock) Extend() (bool, error) {
+func (l *lock) Extend(seconds int64) (bool, error) {
 	conn := l.pool.Get()
 	defer conn.Close()
-	rst, err := redis.Int(touchScript.Do(conn, l.key, l.timeoutSec))
+	if seconds == 0 {
+		seconds = l.timeoutSec
+	}
+	rst, err := redis.Int(touchScript.Do(conn, l.key, l.resourceID, int(seconds)))
 	if err != nil {
 		return false, err
 	}
@@ -141,4 +158,21 @@ func (l *lock) LeftSec() (int64, error) {
 		return 0, err
 	}
 	return rst, err
+}
+
+func (l *lock) GetID() string {
+	return l.resourceID
+}
+
+func (l *lock) Valid() (bool, error) {
+	conn := l.pool.Get()
+	defer conn.Close()
+	rst, err := redis.String(conn.Do("GET", l.key))
+	if err != nil {
+		if err == redis.ErrNil {
+			return false, nil
+		}
+		return false, err
+	}
+	return rst == l.resourceID, nil
 }

@@ -13,5 +13,9 @@ type Ilock interface {
 	// 当 key 存在但没有设置剩余生存时间时，返回 -1 。
 	LeftSec() (int64, error)
 	// 重置锁剩余时间
-	Extend() (bool, error)
+	Extend(int64) (bool, error)
+	// 锁的id
+	GetID() string
+	// 锁当前id和redis中的id是否一致
+	Valid() (bool, error)
 }
