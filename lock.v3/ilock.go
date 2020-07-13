@@ -10,7 +10,8 @@ type Ilock interface {
 	Release() (bool, error)
 	// 查询锁剩余的时间当
 	// key 不存在时，返回 -2 。
-	// 当 key 存在但没有设置剩余生存时间时，返回 -1 。
+	// 当key存在
+	// 但没有设置剩余生存时间时，返回 -1 。
 	LeftSec() (int64, error)
 	// 重置锁剩余时间
 	Extend(int64) (bool, error)

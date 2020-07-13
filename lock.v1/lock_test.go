@@ -172,6 +172,7 @@ func TestLockReleasedByOhters(t *testing.T) {
 	}
 	t.Log(getTime(), "lock1 lock success")
 
+	// Stupid l2, release lock before use!
 	ok, err := l2.Release()
 	if err != nil {
 		t.Fatal(err)
@@ -183,3 +184,4 @@ func TestLockReleasedByOhters(t *testing.T) {
 	}
 	t.Log(getTime(), "woops! lock2 lock success!")
 }
+

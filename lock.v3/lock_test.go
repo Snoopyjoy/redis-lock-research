@@ -151,7 +151,6 @@ func TestLockTimeout(t *testing.T) {
 
 func TestLockAllSuccess(t *testing.T) {
 	l := NewLock("TestLockAllSuccess", pool, &LockOptions{TimeoutSec: 3})
-
 	wg := sync.WaitGroup{}
 	paraSize := 5
 	var successNum int32 = 0
@@ -168,7 +167,6 @@ func TestLockAllSuccess(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
-
 	t.Log(getTime(), "successNum", successNum)
 	if successNum != int32(paraSize) {
 		t.Fatal("parallel lock success num > 1")
